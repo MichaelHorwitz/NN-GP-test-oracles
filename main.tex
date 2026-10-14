@@ -1,0 +1,754 @@
+% This is samplepaper.tex, a sample chapter demonstrating the
+% LLNCS macro package for Springer Computer Science proceedings;
+% Version 2.21 of 2022/01/12
+%
+\documentclass[runningheads]{llncs}
+%
+\usepackage[T1]{fontenc}
+% T1 fonts will be used to generate the final print and online PDFs,
+% so please use T1 fonts in your manuscript whenever possible.
+% Other font encondings may result in incorrect characters.
+%
+\usepackage{comment}
+\usepackage{amssymb, amsmath} % Added amsmath for better math handling
+\usepackage{color}
+\usepackage{graphicx}
+\usepackage{listings}
+\usepackage{lmodern}
+\usepackage{mdframed}
+\usepackage{url}
+\usepackage{placeins}
+\usepackage{algorithm}
+\usepackage{float}
+\usepackage{algpseudocode}
+\usepackage{caption}
+\usepackage{tabularx}
+\usepackage{todonotes}
+\usepackage{cite}
+
+\usepackage{graphicx}
+% Used for displaying a sample figure. If possible, figure files should
+% be included in EPS format.
+%
+% If you use the hyperref package, please uncomment the following two lines
+% to display URLs in blue roman font according to Springer's eBook style:
+%\usepackage{color}
+%\renewcommand\UrlFont{\color{blue}\rmfamily}
+%\urlstyle{rm}
+%
+\begin{document}
+
+\title{Does a Neural Network Test Oracle Need to be Intelligent?}
+\titlerunning{Does a Neural Network Test Oracle Need to be Intelligent?}
+
+%\author{ANONYMOUS FOR REVIEW}
+
+\author{M. Horwitz\inst{1,2}\orcidID{0009-0002-5611-5782}  \and
+F.J. Redelinghuys\inst{1,3}\orcidID{0000-0002-7097-9467} \and
+S. Gruner\inst{1,4}\orcidID{0000-0002-3757-7677}\and
+A.S. Bosman\inst{1,5}\orcidID{0000-0003-3546-1467}}
+
+\institute{
+Department of Computer Science, University of Pretoria, Pretoria, South Africa \and \email{michael@horwitz.co.za} \and
+\email{cobus.redelinghuys@up.ac.za } \and
+\email{sgruner@cs.up.ac.za } \and
+African Institute for Data Science and Artificial Intelligence (AfriDSAI), University of Pretoria, Pretoria, South Africa
+\email{anna.bosman@up.ac.za}
+}
+% Below it says if there are more than two authors, use et al. I am unsure of how the conventions work
+\authorrunning{M. Horwitz et al.}
+
+%%\authorrunning{F. Author et al.}
+% First names are abbreviated in the running head.
+% If there are more than two authors, 'et al.' is used.
+%
+% Also not sure if there are standards here
+%%\institute{Princeton University, Princeton NJ 08544, USA \and
+%%Springer Heidelberg, Tiergartenstr. 17, 69121 Heidelberg, Germany
+%%\email{lncs@springer.com}\\
+%%\url{http://www.springer.com/gp/computer-science/lncs} \and
+%%ABC Institute, Rupert-Karls-University Heidelberg, Heidelberg, Germany\\
+%%\email{\{abc,lncs\}@uni-heidelberg.de}}
+
+\maketitle
+\begin{abstract}
+Neural network (NN)-based test oracles offer a promising approach to automated software testing by learning to predict the expected behaviour of a software system from test data. However, the effectiveness of such oracles depends strongly on the quality and representativeness of the data used for training. This raises an important question: does a NN test oracle need intelligent test generation to be effective? This paper investigates this question by comparing intelligent search-based test generation using genetic programming (GP) with random and linear test input generation. The generated test suites are evaluated both in terms of branch coverage and their ability to train NN test oracles for three software systems under test (SUTs) with different input-space characteristics: a modified Collatz program, a credit-checking application, and a triangle classifier. The results show that no single test-generation strategy is consistently superior. Random generation performs well for SUTs where relevant behaviours are broadly distributed across the input space, while GP provides a clear advantage for the triangle classifier, where important behaviours occupy smaller, structured regions that are difficult to discover through uninformed sampling. Conversely, GP can produce highly concentrated and unrepresentative training data for less structured input spaces, resulting in poorer NN oracle generalisation. These findings suggest that an NN test oracle does not inherently require intelligent test generation; rather, the value of intelligent search depends on the structure of the SUT's input space. The results highlight the importance of selecting test-generation strategies according to the characteristics of the software being tested.
+%Automated test oracles are systems that automatically determine whether a program’s output for a given input is correct. Such oracles can support software testing by reducing the need for manual scrutiny. Recently, neural networks (NNs) have been explored as a way to learn test oracles from data. However, many NN-based oracles suffer from weak or insufficient training data, which limits their accuracy and generalisation ability. In this paper, we investigate the use of genetic programs (GPs) to generate test inputs that achieve high levels of path coverage in a target program. The resulting diverse and comprehensive test cases are then used to train a NN test oracle. The aim is to produce a NN test oracle that is more accurate and more generalisable than those obtained using standard test generation methods. In this study, test suites generated by a GP, a linear generator, and a random generator are used to train NN oracles for three distinct software systems under test (SUTs). Each SUT chosen had a distinct input space, and hence different levels of predictability in their execution paths. For SUTs with chaotic or overly simple input spaces, the GP showed no significant benefit over using a random test case generator. However, for SUTs with complex and clustered instance spaces, the GP was able to significantly outperform other test case generation methods, both for achieving high path coverage, as well as for producing a more accurate NN test oracle. These findings demonstrate that for a NN test oracle to be effective on complex SUTs, an intelligent test suite generation method is important. %Moreover, in some cases the metrics of NN test oracles can also be used for evaluating test suite qualities. %% Touched by Stefan: 4th March %%Further edited by Anna on 6.04.26 - I think the abstract is done!
+
+\keywords{
+Software Testing \and Automated Test Oracles \and Neural Networks \and Genetic Programming \and Test Suite Generation}
+\end{abstract}
+%%%%%%%%%%%%%%
+
+\section{Introduction}
+Software testing \cite{AMMOFF} refers to the process of ensuring (as far as possible) that some software system  
+is compliant with its specification and `fit' for its intended purpose. Testing increases the reliability of the software system under test (SUT), which is important for producing quality software \cite{anand2019importance}. However, testing can become especially difficult when the execution path of the program is unpredictable based on the inputs to the program, or when the source code contains unreachable segments~\cite{whittaker2002software}. 
+
+Despite advances in automated testing techniques, much of the testing in industry is still created and performed manually, with only about 20\% of tests being automatically generated \cite{backstrom2022industrial}. This reliance on manual test creation presents a potential inefficiency in the software development process, and suggests opportunities for greater automation. Automated testing can also help reveal defects in SUTs that might otherwise remain undetected. Consequently, artificial intelligence (AI) techniques have been explored across a range of software testing sub-fields in an effort to improve automation and effectiveness, with varying degrees of success \cite{garousi2016systematic, fernandes2021agents, boukhlif2024natural}.
+
+Test suite generation is a sub-field of software testing concerned with automatically generating test cases that exercise as many execution paths of a SUT as possible. A wide range of automated test-generation approaches have been proposed, including search-based techniques and, more recently, large language models~\cite{khari2020empirical,tang2024chatgpt}. Among these, genetic programming (GP) has been investigated as a search-based approach for generating test suites \cite{goschen2022genetic}, offering a mechanism for intelligently exploring software input spaces and generating test inputs that target different execution branches. Many of these search based techniques use the same coverage based fitness functions. Some techniques like EvoSuite~\cite{fraser2011evosuite} evolve the entire test suite towards achieving high fitness. The GP techniques differ within this problem space by generating small programs that generate the test inputs rather than generating the inputs directly. Offering the ability to easily generate testsuites of arbitrary size to cover the different execution branches.
+
+A test oracle is a source of truth for a SUT that specifies the expected output for a given input. Artificial neural networks (NNs) have been explored as a means of automatically constructing such test oracles \cite{ye2006automated}. In this approach, a NN is trained on a collection of test cases so that it learns to approximate the expected behaviour of the SUT, and can therefore act as a generalised oracle. Although promising results have been reported, the construction of NN test oracles often faces challenges, including limited model accuracy and generalisation. These issues are frequently attributed to the quality and representativeness of the training data, which is derived from the available test suites \cite{hossain2023neural}. When test suites are too small or fail to adequately represent the relevant regions of the program's input space, the resulting neural models may struggle to generalise effectively. Thus, the manner in which test inputs are generated is an important consideration when constructing NN test oracles.
+
+Artificial neural networks (NNs) have been explored as a means of automatically constructing such test oracles~\cite{vanmali2002using,ye2006automated}. Fontes and Gay~\cite{fontes2021using} found in a systematic review that most ML-based oracles predict expected outputs using supervised NNs trained on recorded system executions, and identified the quantity,  quality and content of training data as the principal open challenge~\cite{fontes2021using,hossain2023neural}. However, none of the reviewed studies examined how the test-generation strategy used to produce that training data affects oracle quality.
+
+Search-based and other intelligent test-generation methods offer one possible means of improving the quality of training data by actively searching the input space for test cases that exercise different program behaviours. However, intelligent search is not necessarily beneficial for every SUT. If relevant behaviours are broadly distributed throughout the input space, simple random sampling may provide sufficient coverage without the additional computational cost and complexity of an optimisation-based approach. Conversely, when important behaviours occur in smaller or more structured regions of the input space, intelligent search may be better able to discover them. This raises an important question: does a NN test oracle need intelligent test generation to be effective?
+
+This study investigates this question by comparing GP-based intelligent test generation with random and linear test generation for training NN test oracles. Three SUTs with different input-space characteristics are considered: a modified Collatz program, a credit-checking application, and a triangle classifier. The generated test suites are evaluated in terms of branch coverage, while the resulting NN test oracles are evaluated in terms of their ability to learn and generalise the behaviour of the corresponding SUTs. The aim is not to establish that intelligent search is universally superior, but rather to investigate when intelligent test generation provides an advantage over simpler generation strategies.
+
+The rest of the paper is structured as follows. Section~\ref{sec:meth} discusses the proposed methodology. Section~\ref{sec:disc} presents and discusses the results. Section~\ref{sec:conc} concludes the paper and points out directions for future work.
+
+\section{Methodology} \label{sec:meth}
+\subsection{Experimental Design}
+This study investigates whether intelligent test generation is necessary for constructing effective NN test oracles. Three test suite generation strategies are compared: GP, random generation, and linear generation. The generated test suites are evaluated in terms of their ability to exercise different branches of the SUT, as well as their ability to provide effective training data for an NN test oracle.
+
+For each SUT, each generation strategy is used to produce a test suite consisting of inputs appropriate to the SUT. The resulting tests are executed on the SUT to obtain the corresponding input-output pairs and to measure branch coverage. Each test suite is then used to train a separate NN test oracle. The trained NNs are subsequently evaluated on their ability to reproduce the behaviour of the SUT.
+
+The experimental procedure therefore comprises three main stages: test suite generation, NN test-oracle construction, and evaluation. The procedure is applied to three SUTs with different input-space characteristics. This allows the study to examine not only whether intelligent test generation can improve NN test oracles, but also whether its effectiveness depends on the characteristics of the SUT. The overall experimental design is illustrated in Figure~\ref{fig:summary_structure}.
+
+\begin{figure}[!htb]
+    \centering
+    \includegraphics[width=0.9\textwidth]{method_michael.png}
+    \caption{Basic structure of the proposed methodology.}
+    \label{fig:summary_structure}
+\end{figure}
+
+
+\subsection{Software Under Test (SUT)}
+Several SUTs were selected to provide diverse input and output spaces. For each SUT, path (branch) coverage was calculated as the number of executed branches divided by the total number of possible branches for a given set of inputs. SUTs considered in this study are discussed below.
+
+\subsubsection{Modified Collatz:} 
+This program checks whether a given non-zero positive integer satisfies the Collatz conjecture. The Collatz conjecture states that, for any non-zero positive integer, the function $T(x)$ can be applied iteratively, where:
+$$
+T(x) =
+\begin{cases}
+    x/2 & \text{if } x \text{ is even,} \\
+    3x+1 & \text{if } x \text{ is odd.}
+\end{cases}
+$$
+After a finite number of iterations, the result is conjectured to reach 1 \cite{van2005collatz}. For this study, the program was modified to track the frequency of each rule’s application, and return this information as output. The modified Collatz was selected due to its inherently unpredictable path choices for a given set of inputs. The pseudo-code for modified Collatz is given in Algorithm \ref{code:sut_coverage}.
+
+\begin{center}
+\begin{algorithm}[!htb]
+\captionof{algorithm}{Collatz Color Classification}
+\label{code:sut_coverage}
+\scriptsize
+\begin{algorithmic}[1]
+\State $p \gets 0$
+\If{$number = 0$}
+    \State $number \gets 1$
+\EndIf
+\If{$number \leq 0$}
+    \State $number \gets number \times -1$
+\EndIf
+\While{$number \neq 1$}
+    \If{$number \pmod 2 = 0$}
+        \State $p \gets p + 1$
+        \State $number \gets \lfloor number / 2 \rfloor$
+    \Else
+        \State $p \gets p - 1$
+        \State $number \gets 3 \times number + 1$
+    \EndIf
+\EndWhile
+\If{$p < 5$} \State \Return "RED"
+\ElsIf{$p < 15$}
+    \State \Return "ORANGE"
+\ElsIf{$p < 30$}
+    \State \Return "YELLOW"
+\ElsIf{$p < 40$}
+    \State \Return "GREEN"
+\ElsIf{$p < 50$}
+    \State \Return "BLUE"
+\ElsIf{$p < 60$}
+    \State \Return "PINK"
+\ElsIf{$p < 70$}
+    \State \Return "PURPLE"
+\Else
+    \State \Return \textbf{null}
+\EndIf
+\end{algorithmic}    
+\end{algorithm}
+\end{center}
+
+\subsubsection{Credit Checking Application:} This SUT takes as input a list of numerical attributes of a credit applicant, and determines their eligibility for a specified credit amount. The pseudocode for the algorithm is provided in Algorithm \ref{code:credit}, and each attribute is described in Table \ref{table:credit}. This application was previously used by Vanmali~\cite{vanmali2002using} to create a NN test oracle.
+
+\begin{table}[!htb]
+\centering
+\caption{Input attributes of the data for the credit checking application.}
+\label{table:credit}
+\begin{tabularx}{\textwidth}{|l|c|c|X|}
+\hline
+\textbf{Name of the attribute} & \textbf{Data type} & \textbf{Attribute type} & \textbf{Details} \\
+\hline
+Serial ID number & integer & Input & unique for each customer \\
+\hline
+Citizenship & integer & Input & 0: American; 1: Others \\
+\hline
+State & integer & Input & 0: Florida; 1: other states \\
+\hline
+Age & integer & Input & 1--100 \\
+\hline
+Sex & integer & Input & 0: Female; 1: Male \\
+\hline
+Region & integer & Input & 0--6 for different regions in U.S. \\
+\hline
+Income class & integer & Input & 0 if income p.a. $<$ \$10k; 1 if income p.a. $\geq$ \$10k; 2 if income p.a. $\geq$ \$25k; 3 if income p.a. $\geq$ \$50k \\
+\hline
+Number of dependents & integer & Input & 0--4 \\
+\hline
+Marital status & integer & Input & 0: Single; 1: Married \\
+\hline
+Credit approved & integer & Output & 0: No; 1: Yes \\
+\hline
+Credit amount & integer & Output & $\geq 0$ \\
+\hline
+\end{tabularx}
+\end{table}
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\begin{center}
+\begin{algorithm}[!htb]
+\captionof{algorithm}{Credit Approval Algorithm}
+% \caption{Credit Approval Algorithm}
+\label{code:credit}
+\scriptsize
+\begin{algorithmic}[1]
+\State $creditLimit \gets 0$
+\If{$region = 5$ \textbf{or} $region = 6$}
+    \State $creditLimit \gets 0$
+\Else
+    \If{$age < 18$}
+        \State $creditLimit \gets 0$
+    \ElsIf{$citizenship = 0$}
+        \State $creditLimit \gets 5000 + 1000 \times incomeClass$
+        \If{$state = 0$}
+            \If{$region = 3$ \textbf{or} $region = 4$}
+                \State $creditLimit \gets creditLimit \times 2$
+            \Else
+                \State $creditLimit \gets creditLimit \times 1.5$
+            \EndIf
+        \Else
+            \State $creditLimit \gets creditLimit \times 1.1$
+        \EndIf
+        \If{$maritalStatus = 0$}
+            \If{$numberDependents > 0$}
+                \State $creditLimit \gets creditLimit + 200 \times numberDependents$
+            \Else
+                \State $creditLimit \gets creditLimit + 500$
+            \EndIf
+        \Else
+            \State $creditLimit \gets creditLimit + 1000$
+        \EndIf
+        \If{$sex = 0$}
+            \State $creditLimit \gets creditLimit + 500$
+        \Else
+            \State $creditLimit \gets creditLimit + 1000$
+        \EndIf
+    \Else
+        \State $creditLimit \gets 1000 + 800 \times incomeClass$
+        \If{$maritalStatus = 0$}
+            \If{$numberDependents > 2$}
+                \State $creditLimit \gets creditLimit + 100 \times numberDependents$
+            \Else
+                \State $creditLimit \gets creditLimit + 100$
+            \EndIf
+        \Else
+            \State $creditLimit \gets creditLimit + 300$
+        \EndIf
+        \If{$sex = 0$}
+            \State $creditLimit \gets creditLimit + 100$
+        \Else
+            \State $creditLimit \gets creditLimit + 200$
+        \EndIf
+    \EndIf
+\EndIf
+\State $creditAmount \gets creditLimit$
+\If{$creditAmount = 0$}
+    \State $creditApproved \gets \textbf{False}$
+\Else
+    \State $creditApproved \gets \textbf{True}$
+\EndIf
+\State \Return $creditApproved$
+\end{algorithmic}
+\end{algorithm}
+\end{center}
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%\FloatBarrier
+
+\subsubsection{Triangle Classifier:} 
+This SUT takes as input three positive integer values, and determines if those three integers form three sides of a valid triangle. If the sides can form a triangle, the program returns the triangle type. This SUT has been used in past research to show the effectiveness of a given test suite generation technique~\cite{xiao2007empirical}. This SUT is particularly good at showing the intelligence of a given test suite generation technique, as it has a large set of inputs, i.e., all possible possible integers, but only a small subset of that input space can adequately cover different branches within the SUT. The pseudo-code for the algorithm is shown in Algorithm~\ref{code:triangle}.
+
+\begin{center}
+\begin{algorithm}[!htb]
+\captionof{algorithm}{Triangle Classification Algorithm}
+\label{code:triangle}
+\scriptsize
+\begin{algorithmic}[1]
+\If{$a \leq 0$ \textbf{or} $b \leq 0$ \textbf{or} $c \leq 0$}
+    \State \Return $INVALID$
+\EndIf
+\If{$a + b \leq c$ \textbf{or} $a + c \leq b$ \textbf{or} $b + c \leq a$}
+    \State \Return $INVALID$
+\EndIf
+\If{$a = b$ \textbf{and} $b = c$}
+    \State \Return $EQUILATERAL$
+\ElsIf{$a = b$ \textbf{or} $b = c$ \textbf{or} $a = c$}
+    \State \Return $ISOSCELES$
+\Else
+    \State \Return $SCALENE$
+\EndIf
+\end{algorithmic}    
+\end{algorithm}
+\end{center}
+\subsection{Test Suite Generation}
+
+Three test input generation strategies are compared: GP-based intelligent search, random generation, and linear generation.
+
+\subsubsection{Genetic Programming:}
+
+The GP-based intelligent search strategy follows the approach proposed by Goschen et al.~\cite{goschen2022genetic}. GP evolves candidate programs that generate test inputs for the SUT. The primitive set consists of arithmetic operators, comparison operators, and conditional branching, while terminal nodes generate numerical operands or random values within specified bounds. Candidate programs are evolved using subtree crossover and subtree mutation. The GP is represented as an expression tree. The tree consists of linked objects of the Node class. Each evolved tree is repeatedly evaluated and those individuals are grouped together to form a set that is used for the test set.
+
+The fitness of an individual is determined by the branch coverage achieved when executing the test inputs generated by the individual on the SUT. Since the GP implementation formulates the problem as a minimisation objective, fitness is defined as
+
+\begin{equation}
+F = 1-C,
+\end{equation}
+
+where $C$ denotes the branch coverage achieved by the generated test suite. Tournament selection is used to select individuals for reproduction. Because every fitness evaluation executes the SUT on a full candidate suite, GP uses substantially more SUT executions than the baselines.
+
+\subsubsection{Random and Linear Generation:}
+Two non-search-based baselines are used. Random generation samples each input uniformly and independently from the SUT's input domain. Linear generation traverses the domain systematically from a fixed start value in fixed steps. Neither adapts to the behaviour or coverage of the SUT. All generation, training and evaluation settings are summarised in Table~\ref{tab:repro}.
+
+\begin{table}[!htb]
+\centering
+\caption{Reproducibility settings per SUT.}
+\label{tab:repro}
+\scriptsize
+\setlength{\tabcolsep}{3pt}
+\renewcommand{\arraystretch}{1.1}
+\begin{tabular}{|l|p{2.9cm}|p{2.9cm}|p{2.9cm}|}
+\hline
+ & \textbf{Collatz} & \textbf{Credit} & \textbf{Triangle} \\
+\hline
+Test input & 1 integer & 8 attributes + id (Table~\ref{table:credit}) & 3 integers $(a,b,c)$ \\
+Random & $U\{0,\dots,10\,000\}$ & each attribute uniform over its range; id $U\{0,\dots,9\,999\,999\}$ & $U\{1,\dots,10\,000\}^3$ \\
+Linear & $0, 1, 2, \dots$ & lexicographic enumeration of the Cartesian product & $(1,1,1), (2,2,2), \dots$ \\
+GP & output clipped to $[0, 10\,000]$ & one output per attribute, modulo domain size & float, unclipped \\
+Coverage outcomes & 7 (output classes) & 23 (both outcomes of each decision) & 6 \\
+NN inputs & 1 & 10 & 3 \\
+NN target, loss & $p$ (integer), MSE & approved, 2-col.\ one-hot, binary cross-entropy & 4-class one-hot, categorical cross-entropy \\
+Metric & MSE & accuracy & accuracy \\
+\hline
+Shared & \multicolumn{3}{p{9.1cm}|}{1\,000 inputs per suite; 10 independent runs; no deduplication; no input preprocessing.} \\
+GP & \multicolumn{3}{p{9.1cm}|}{Population 100; max depth 3; tournament size 3; 10 generations; crossover 0.8; mutation 0.2; fitness $F=1-C$; no early stopping.} \\
+NN & \multicolumn{3}{p{9.1cm}|}{MLP, 2 hidden layers $\times$ 32 ReLU; softmax (classification) or linear (regression) output; Adam, learning rate 0.001; 20 epochs; batch size 64; 85/15 train/validation split.} \\
+\hline
+\end{tabular}
+\end{table}
+
+%Genetic Program (GP)
+%The GP implemented in this study follows the approach first proposed by Goschen et al.~\cite{goschen2022genetic} in 2022. Goschen et al. proposed a GP–based automated software testing framework that evolves reusable micro-programs to efficiently generate input values for exploring software input domains, aiming to improve execution path coverage and generalise across different software systems without retraining on each component.
+
+%The GP parameters used in this study are listed in Table \ref{tab:gp_params}. Further, this study uses the primitives as described in Table \ref{table:prim}, and the terminal nodes (terminals) as described in Table \ref{table:term}. Primitives and terminals are used to construct micro-programs responsible for input generation. Both sets of nodes were taken from Goschen et al.~\cite{goschen2022genetic}. Subtree crossover and subtree mutation were used for crossover and mutation. Fitness was evaluated by generating a test suite using an individual of the GP population (micro-program), and passing the generated input to the current SUT being evaluated to calculate the path coverage. Complement of coverage was then calculated as $$F = 1-C$$ and used as a minimisation objective. %The inverse of coverage was used at the beginning of research but was found to produce a worse performing GP. 
+%Tournament selection was chosen as the selection mechanism. 
+
+\begin{comment}
+\begin{table}[!htb]
+    \centering
+    \caption{GP Parameters}
+    \begin{tabular}{|c|c|}
+        \hline
+        \textbf{Parameter} & \textbf{Value} \\ 
+        \hline
+        Population size & 100 \\
+        \hline
+        Maximum depth & 3 \\
+        \hline
+        Tournament selection size & 3\\
+        \hline
+        Generations & 10 \\
+        \hline
+        Crossover rate & 0.8 \\
+        \hline
+        Mutation rate & 0.2 \\
+        \hline
+    \end{tabular}
+    \label{tab:gp_params}
+\end{table}
+\begin{table}[!htb]
+\centering
+\caption{Primitives used in the system.}
+\label{table:prim}
+\begin{tabular}{|l|p{10cm}|}
+\hline
+\textbf{Primitives} & \textbf{Description} \\
+\hline
+Add & Performs addition of two operands. \\
+\hline
+Subtraction & Performs subtraction of one operand from another. \\
+\hline
+Multiplication & Performs multiplication of two operands. \\
+\hline
+Division & Performs division of one operand by another. \\
+\hline
+GreaterThan & Compares two operands and returns true if the first is greater than the second. \\
+\hline
+LessThan & Compares two operands and returns true if the first is less than the second. \\
+\hline
+NotEqual & Compares two operands and returns true if they are not equal. \\
+\hline
+If & A conditional branching node: evaluates a condition and returns one of two possible values depending on whether the condition is true or false. \\
+\hline
+\end{tabular}
+\end{table}
+\begin{table}[!htb]
+\centering
+\caption{Terminal nodes used in the system.}
+\label{table:term}
+\begin{tabular}{|l|p{10cm}|}
+\hline
+\textbf{Terminal} & \textbf{Description} \\
+\hline
+Operand & Generates a numeric operand with a random value within a given bound. \\
+\hline
+Random & Generates a random number within a given bound. \\
+\hline
+\end{tabular}
+\end{table}
+
+For each SUT, the GP must be adapted to produce suitable input. For the modified Collatz, the GP produced one integer per test;  for the credit application checking program, the GP produced a vector of integers in line with the requirements of Algorithm \ref{code:credit}; for the triangle classifier, the GP was set to produce a set of three integers for each test.
+
+    
+\end{comment}
+
+%\subsection{Neural Networks}
+%Keras was used to implement the NN test oracles as simple multilayer perceptrons (MLPs). The input and hidden layers used the ReLU activation function, motivated by its effectiveness in previous studies \cite{samir2019investigating}. The network architecture comprised two hidden layers of 32 neurons each, which were found to yield performance comparable to deeper configurations. The SUTs produced either categorical or regression outputs. For categorical outputs, a softmax activation was applied in the final layer, whereas a linear activation was used for regression outputs.
+\subsection{Neural Network Test Oracles}
+\label{sec:oracle}
+
+Each generated test suite is used to construct a separate NN test oracle for the corresponding SUT. The NN is trained to approximate the mapping between the inputs and outputs of the SUT. Given a test input $x$, the trained NN produces an estimated output
+
+\begin{equation}
+\hat{y} = f_{\mathrm{NN}}(x),
+\end{equation}
+where $f_{\mathrm{NN}}$ represents the learned approximation of the behaviour of the SUT.
+
+The NN test oracles are Keras multilayer perceptrons; architecture, encodings and training settings are given in Table~\ref{tab:repro}.
+
+A separate NN test oracle is trained for each combination of SUT and test suite generation strategy. Thus, for each SUT, three NN test oracles are constructed, with the training data generated using GP, random generation, and linear generation, respectively. The NN architecture and training procedure are kept consistent across the generation strategies so that differences in oracle performance can be attributed to the characteristics of the generated test suites.
+
+The resulting NN test oracles are evaluated on their ability to reproduce the behaviour of the corresponding SUT. This allows the study to examine whether differences in test suite generation and branch coverage translate into differences in the quality and generalisation of the resulting NN test oracles.
+
+\subsection{Evaluation}
+%To understand the effectiveness of using GP test suite generation to train a NN test oracle, two other test suite generation methods have been used as a benchmark. The linear test suite generation method generates a test suite by starting at a predefined value, and generating a new test value at intervals of a predefined step until a predefined maximum value is reached. The random test suite generation method generates a random value within a certain predefined range for as many times as needed. The different test generation methods will be compared by their path coverage on the different SUTs. Because GP and the random generation use randomness in order to perform their operations, path coverage will be measured over 10 independent runs. The means will be compared as well as performing a p-value test to determine statistical significance. The NN will be measured first on its ability to learn the data set for each generation method. Both loss and accuracy will be considered when evaluating the ability of the NN to learn the data set. To evaluate the performance of the data set the test suite generated by the other two respective generation methods as well as a validation subset from the current test suite will be inputted to both the SUT and the test oracle NN. For regression problems the mean error will be used as the evaluation metric and for classification problems the number of different results will be used as an evaluation metric.
+
+%To evaluate the effectiveness of GP-based test suite generation for training a NN test oracle, two benchmark generation methods are also considered in this study: linear and random generation. The linear method constructs a test suite by starting from a predefined value and generating new test inputs at fixed intervals until a predefined maximum value is reached. The random method generates test inputs by randomly sampling from a uniform distribution within a predefined range.
+
+%The generation methods are compared based on their path coverage across the SUTs. Because both GP and random generation involve stochastic processes, path coverage is measured over ten independent runs. The mean coverage values are compared, and statistical significance is assessed using the Welch's t-test where the null hypothesis is that the mean code coverage achieved by the GP is not greater than that of the random generator.
+
+%The NN is first evaluated on its ability to learn the training data produced by each generation method. Both loss and accuracy are used as evaluation metrics. To assess generalisation performance a manually created validation set from the current test suite is provided as input to both the SUT and the NN test oracle. For regression tasks, performance is measured using mean error, whereas for classification tasks, the number of different outputs is used as the evaluation metric.
+
+The generation strategies are evaluated from two complementary perspectives: the ability of the generated test suites to explore the SUT and the ability of the resulting training data to support effective NN test oracles. The first is assessed using branch coverage, while the second is assessed using the performance of the trained NN on a common validation set.
+
+\subsubsection{Branch Coverage:}
+
+Branch coverage measures how thoroughly each test suite explores its SUT. Each SUT is hand-instrumented to record a set of outcomes (Table~\ref{tab:repro}), and coverage is the percentage of these outcomes exercised by at least one test. For Credit these are both outcomes of every decision; for Collatz they are the output classes of $p$; for Triangle they are the validity checks and triangle types. The mean coverage over all runs is reported for each generation strategy.
+
+The generation methods are compared statistically using Welch's $t$-test. The null hypothesis is that the mean branch coverage achieved by GP is not greater than that achieved by the random generator. The same comparisons are considered for each SUT to determine whether intelligent search provides an advantage over uninformed test generation.
+
+In addition to coverage for a fixed test suite size, the number of tests required to achieve full branch coverage is considered where full coverage is achieved. This provides an indication of how efficiently each generation strategy explores the SUT. 
+
+\subsubsection{NN Test-Oracle Performance:}
+Each NN test oracle is first evaluated on its ability to learn the input-output pairs contained in its training data. Training loss and accuracy are monitored during training, as appropriate to the type of SUT.
+
+To evaluate generalisation, a common validation set is used for the three generation methods for each SUT. The validation inputs are provided both to the SUT and to the corresponding NN test oracle, allowing the NN predictions to be compared with the actual SUT outputs. The validation set combines inputs generated using the different test-generation strategies and therefore covers a broader range of the input space than any individual training suite.
+
+For the modified Collatz SUT, the NN is trained to predict the integer $p$ (the number of even steps minus odd steps) rather than the colour returned by Algorithm~\ref{code:sut_coverage}. Since the colour is a fixed threshold function of $p$, predicting $p$ is sufficient to recover the colour, and $p$ preserves the ordering and magnitude information that a categorical encoding of the colour would discard. Collatz is therefore treated as a regression task and evaluated using mean squared error (MSE), measured in units of $p^2$. For the credit-checking and triangle-classification SUTs, performance is evaluated using classification accuracy. These measures provide an indication of how effectively the training data generated by each method enables the NN to reproduce the behaviour of the SUT.
+
+The results are analysed across the three SUTs to determine whether the effectiveness of intelligent test generation is consistent across different input-space characteristics, or whether simpler generation strategies can provide equally effective or superior training data for NN test oracles.
+
+
+\section{Results and Discussion} \label{sec:disc}
+The results are analysed from two complementary perspectives: the ability of each test generation method to explore the SUT through branch coverage (Section~\ref{sub:path}), and the ability of the resulting test suites to provide effective training data for NN test oracles (Section~\ref{sub:oracle}). The objective is not to determine whether one generation method is universally superior, but to investigate under which characteristics of the SUT intelligent search provides an advantage over simpler generation strategies.
+
+%The effectiveness of using a GP to generate a test suite for training a NN test oracle is studied in terms of path coverage (Section~\ref{sub:path}) and NN test oracle performance (Section~\ref{sub:oracle}).
+
+\subsection{Branch Coverage}\label{sub:path}
+%The first step to understanding the effectiveness of a test suite generation method is evaluating how many paths it can cover using a large test suite. Table \ref{tab:coverage_results} lists mean path coverage across considered input generation methods for 1000 samples. Table \ref{tab:coverage_results} shows that the GP is able to outperform the linear generation method for the credit checking SUT and the triangle classification SUT, but not for modified Collatz. This is because for an arbitrary input into the modified Collatz, each path is equally likely to be executed, whereas for the credit checking SUT, there are many permutations that end in the same branch, i.e., if the age is less than 18 or the region is 5 or 6, many of the other branches cannot be explored. Likewise, for the triangle classifier SUT, the GP is able to find the branch of the program that can be executed after the test to see if the triangle is valid, and then explore the respective sub-branches that deal with actually classifying the triangle. 
+Table~\ref{tab:coverage_results} presents the mean branch coverage achieved by the three generation methods using 1000 test inputs. The results show that no method consistently achieves the highest coverage across all three SUTs. Random generation achieves the highest coverage for the modified Collatz and credit-checking SUTs, while GP achieves the highest coverage for the triangle classifier.
+
+
+\begin{table}[!htb]
+    \centering\caption{Mean path coverage per SUT for each generation method over 10 runs}
+    \label{tab:coverage_results}
+    \begin{tabular}{|c|c|c|c|}
+        \hline
+                    & Random    & Linear    & GP        \\
+        \hline
+        Collatz     & 90.48     & 71.42     & 71.42     \\
+        Credit      & 100.00    & 17.39     & 95.65     \\
+        Triangle    & 55.56     & 33.33     & 100.00    \\
+        \hline
+    \end{tabular}
+    
+\end{table}
+
+For the modified Collatz SUT, random generation achieves the highest coverage at 90.48\%, compared with 71.42\% for both linear generation and GP. The result suggests that intelligent search does not provide an advantage for this SUT. The branch behaviour of the modified Collatz program depends on the sequence of operations generated by each input, making it difficult for GP to identify input patterns that consistently improve coverage. Figure~\ref{fig:collatz-branch-hist} provides further evidence of this behaviour. Random generation explores the branches relatively broadly, whereas GP fails to reach the yellow and orange branches. In this case, the evolutionary component of GP does not appear to provide a useful search direction, and the resulting test suite behaves more like a limited random search.
+
+\begin{figure}[!htb]
+    \centering    \centerline{\includegraphics[width=1\linewidth]{hist_Collatz_comparison.png}}
+    \caption{Collatz branch frequency comparison}
+    \label{fig:collatz-branch-hist}
+\end{figure}
+
+The credit-checking SUT presents a different situation. Random generation achieves complete branch coverage, while GP reaches 95.65\%. Both methods therefore explore most of the program behaviour. The relatively small difference indicates that intelligent search provides little additional benefit when random sampling is already capable of reaching the relevant branches. The branch-frequency distribution in Figure~\ref{fig:credit-branch-hist} supports this observation. Random generation provides relatively broad coverage of the branches, whereas GP exhibits some concentration on particular branches. This suggests that GP tends to exploit regions of the input space that provide useful fitness values rather than maintaining broad exploration of the entire input space.
+
+
+
+\begin{figure}[!htb]
+    \centering
+    \centerline{\includegraphics[width=1\linewidth]{hist_CreditCheck_comparison.png}}
+    \caption{Credit check branch frequency comparison}
+    \label{fig:credit-branch-hist}
+\end{figure}
+
+The triangle classifier provides the clearest evidence for the benefit of intelligent search. GP achieves 100\% branch coverage, compared with 55.56\% for random generation and 33.33\% for linear generation. Random generation primarily produces invalid and scalene triangles, while linear generation is restricted by the way the three sides are incremented and therefore explores only a limited subset of possible triangle types. In contrast, GP is able to identify inputs that exercise the less frequently encountered branches corresponding to the different triangle classifications. This demonstrates the potential value of intelligent search when important behaviours occupy relatively small or structured regions of the input space.
+
+\begin{figure}[!tb]
+    \centering
+    \centerline{\includegraphics[width=1\linewidth]{hist_TriangleClassifier_comparison.png}}
+    \caption{Triangle Classifier branch frequency comparison}
+    \label{fig:triangle-branch-hist}
+\end{figure}
+
+The number of tests required to achieve full branch coverage provides a complementary view of these results. For the modified Collatz SUT, random generation reaches full coverage after an average of 1260 tests, while linear generation requires 3720 tests and GP does not achieve full coverage. For the credit-checking SUT, random generation achieves full coverage in only 46 tests, whereas linear generation requires 104401 tests and GP does not achieve full coverage. For the triangle classifier, GP consistently achieves full coverage in fewer than 1000 tests, while neither random nor linear generation achieves full coverage within the available computational budget.
+
+These results indicate that the effectiveness of intelligent search is strongly dependent on the structure of the SUT's input space. GP is advantageous when it can identify and exploit input regions associated with otherwise difficult-to-reach branches. However, when relevant behaviours are already broadly distributed across the input space, random sampling can provide comparable or better exploration without the additional search process. Furthermore, high branch coverage does not necessarily imply that the resulting test suite provides representative training data for an NN test oracle. This distinction is examined next.
+
+
+%When comparing the random generation to the GP, it is evident that for the Collatz SUT, there is a significant difference between these generation methods. This is likely because the input space that the random sampling generates is larger than the input space that the GP is able to explore. Likewise, for the credit checking SUT, both perform similarly, and the only branch that is not executed by the GP is the ``else" statement of the check whether the user is in region 3 or 4. This indicates that the GP leans towards exploitation over the  exploration. 
+
+%Finally, for the triangle classification SUT the GP far outperforms the random generator. The stochastic nature of the random generator does not allow it to find salient input regions, as such the random generator only explores invalid triangles and scalene triangles. Similarly, linear generator with its equidistant steps fails to focus on salient input regions.
+
+%In Figures \ref{fig:collatz-branch-hist}, \ref{fig:credit-branch-hist}, and \ref{fig:triangle-branch-hist}, each SUT branch is assigned a different colour, and a comparison of the frequency at which each branch was chosen for a given test generation method and SUT over the 10 runs is shown. 
+
+%Figure \ref{fig:collatz-branch-hist} shows that the random generator somewhat evenly explores the branches of the Modified Collatz, but cannot explore the red and orange branches. These branches require few $x\div2$ or even paths to be chosen as compared to $x\cdot3 + 1$ or odd branches, which happens more often when smaller values are checked. The random number generator does not specifically check for smaller numbers, as such some branches are missed. On the other hand, the linear generator is able to explore the branches with few even branches as compared to odd, that is, branches red, orange, yellow, and green, which need less than 40 evens more than odds. Finally, the GP fails to explore the yellow and orange branches, which are branches that have between 15 and 30 more even branches than odd branches. This behaviour likely stems from the the GP not being able to find a reasonable pattern to achieve high path coverage, and as such it relies on random permutations present in the GP algorithm (rather than the hereditary evolutionary process) to generate test suites. In essence, the GP is reduced to a limited random generator in this context. 
+
+
+%For the credit checking algorithm (Figure~\ref{fig:credit-branch-hist}), the random generator is evenly spread across all branches, with spikes in the white and blue branches. The blue branch encapsulates all inputs where the region is not 5 or 6, which explains the higher frequency of that branch. Likewise, the white branch encompasses all branches which result in a ``true'' being returned as output, which explains that spike in frequency. 
+%For the linear generation, the high frequency branches can all be executed in a single run together, which shows how the linear generation is not able to properly explore the program well.
+%When looking at the linear generation, the blue, khaki, teal, violet, and white branches all achieve high frequency. These branches can all be executed in one run of the SUT, and represent a narrow range of the total possible inputs to the SUT. High frequency in these branches indicates that the linear generator is poor at exploring the space of all possible inputs.
+%The GP is able to hit most branches at the same frequency, exhibiting some bias towards the black and blue branches. The GP fails to execute the orange branch, which is the complementary branch of the pink branch. Again, it seems that GP has the propensity to exploit rather than explore. 
+
+
+
+%Finally, Figure \ref{fig:triangle-branch-hist} shows that the random generator is only able to execute the branches for an invalid triangle (blue) and a scalene triangle (pink and yellow). Since the random generator is stochastic, it cannot intelligently choose to explore the other branches. The linear generation was only able to generate equilateral triangles, as such it could only execute the green and pink branches. This is due to the way the linear generator is set up, where each side is incremented in each iteration. A more exhaustive linear \textit{grid} search could have considered all permutations of a fixed set of integers instead, however, such a grid search would not adhere to linear complexity. The GP was able to explore all branches of the triangle SUT, which shows its ability to intelligently search through the input space with limited areas of saliency. This falls in line with recent instance space analysis on search based software techniques (SBSTs), that shows that software with lower nesting is easier to explore for SBSTs like the GP shown here~\cite{neelofar2022instance}. 
+
+
+%The standard deviation across SUTs and generators was either 0 or sufficiently close to 0, such that p-value tests trivially showed that the difference in performance was statistically significant. 
+
+%A different approach to understanding the path coverage is to analyse how small of a test suite each generation method needs to achieve 100\% test coverage. For Collatz, random is able to achieve full coverage after 1260 tests  on average. Linear is able to achieve full coverage after 3720 tests, and the GP is not able to achieve full path coverage. Random is able to fully cover credit check in 46 tests. Linear is able to fully cover the credit check in 104401 tests. GP again was not able to fully cover the program. Finally, for the triangle classifier, the random generator was not able to fully cover the space in reasonable compute time. The linear generator was not able to fully cover the program space, and the GP consistently fully covered the program space in under 1000 tests.
+
+\subsection{Neural Network  Test-Oracle Performance}\label{sub:oracle}
+%In this section, we determine how effectively each test generation method can train a NN to act as a test oracle. A summary of the results is given in Table \ref{tab:nn_perf}, which shows that linear achieved the lowest MSE for Collatz, random was best for credit checking, and that the GP was best for the triangle classifier. Each SUT is analysed below in the context of NN test oracle creation.
+Table~\ref{tab:nn_perf} summarises the performance of the NN test oracles trained using the three generation methods. The results reinforce the observation that no single generation strategy is consistently superior. Linear generation produces the lowest MSE for the modified Collatz SUT, random generation produces the highest accuracy for the credit-checking SUT, and GP produces the highest accuracy for the triangle classifier.
+
+\begin{table}[!htb]
+\centering
+	\caption{Metrics for NN performance for each generator and SUT}
+	\label{tab:nn_perf}
+	\begin{tabular}{|c|c|c|c|}
+		\hline
+		& Collatz MSE & Credit Accuracy \% & Triangle Accuracy \%   \\
+		\hline
+		Random & 419.16      & 97.33              & 10.35                  \\
+		Linear & 321.84      & 8.00               & 4.17                   \\
+		GP     & 14313.56    & 61.33              & 31.80                  \\
+		\hline
+	\end{tabular}
+\end{table}
+
+\subsubsection{Modified Collatz:}
+
+For the modified Collatz SUT, all three NNs rapidly reduce their training loss, but validation performance differs substantially, with the GP-trained NN producing a particularly large MSE. As shown in Figure~\ref{fig:nn_collatz}, GP generates predominantly small input values, whereas the validation set spans a substantially larger range, suggesting that its test suite is not representative of the broader input space. This illustrates that intelligent search does not necessarily produce better training data, as concentrating tests in a limited region can impair NN generalisation. The linear generator achieves the lowest validation MSE of 321.84, although all three methods produce relatively high errors, indicating that the non-linear Collatz behaviour remains difficult for the NN to approximate accurately. The results therefore provide a counterexample to the assumption that intelligent test generation necessarily improves NN test oracles, suggesting that broad exploration can be more beneficial than targeted search for this SUT.
+
+%For the modified Collatz SUT, the MSE of the NN is analysed to determine how effective the NN is as a test oracle. Figure \ref{fig:nn_collatz} shows the training (solid line) and validation (dashed line) MSE obtained via training the NN test oracle using each of the sampling methods to generate the input-output pair. For all three generation methods, training loss is quickly minimised, showing that the NNs are able to learn from their test suites well. However, validation MSE, especially for the GP, is not necessarily consistent with the training.  Looking at the test suite generated by the GP, it is evident that most of the values are rather small. The validation set, however, spans a much greater range, since the validation set combines inputs generated by all three generation methods. %The validation set is created manually by the authors to have high path coverage and represents the manual human made alternative to automatic test suite generation. 
+%The poor MSE of the NN in this case indicates that the input data from the GP is not particularly representative of the SUT that it is testing. As such, the metrics of the NN test oracle  provide a better understanding into the effectiveness of the test suite to properly explore the program. The poor overall performance of all NN test oracles (best validation MSE $=321$) is indicative of the fact that it is difficult for a NN to capture the highly unpredictable nature of how the Modified Collatz works. Figure \ref{fig:scatter-collatz} shows a scatter plot of the input-output pairs for the modified Collatz. While a pattern is observable, there is no simple linear correlation. This complexity explains the poor performance of NN test oracles.
+
+\begin{figure}[!htb]
+    \centering
+    %\hspace*{-1cm}
+    \makebox[\textwidth][c]{\includegraphics[width=1\linewidth]{Collatz-MSE-epochs.png}}
+    \caption{Collatz MSE over time}
+    \label{fig:nn_collatz}
+\end{figure}
+\begin{figure}[!htb]
+    \centering
+    \makebox[\textwidth][c]{\includegraphics[width=0.7\linewidth]{scatter.png}}
+    \caption{Instance space analysis diagram for modified Collatz.}
+    \label{fig:scatter-collatz}
+\end{figure}
+\subsubsection{Credit Check:}
+The results for the credit-checking SUT provide further evidence that intelligent search is not universally beneficial. The NN trained using the random test suite achieves the highest validation accuracy at 97.33\%, while the GP- and linear-trained NNs achieve 61.33\% and 8.00\%, respectively. The relatively balanced distribution of randomly generated inputs provides training examples for the different behaviours of the SUT, enabling effective generalisation, whereas the GP and linear test suites are concentrated on particular branches and therefore provide less representative training data. As shown in Figure~\ref{fig:credit-branch-hist}, the GP search does not substantially improve upon the broad exploration achieved by random generation. These results suggest that when random sampling already provides effective coverage of the relevant input space, intelligent search offers limited additional value and may instead produce a more concentrated training distribution.
+
+%The behaviour of the NN test oracles when trained for the Credit Check SUT is shown in Figure \ref{fig:nn_credit}. The NN is able to learn from the test suite of the random generator, and, since this test suite is well balanced across branches, the NN becomes an adequate test oracle for the SUT, as seen in the high validation accuracy. For the linear generator, the NN is also able to learn,  but since the test suite is biased towards specific branches, the NN is learning straightforward rules to return the same value, as such the produced NN test oracle is hardly adequate. Finally, the GP produces a NN test oracle with high training, but low validation accuracy, indicative of overfitting to the training set. This shortcoming likely comes from earlier observed tendency of the GP to exploit rather than explore: the produced inputs are clustered, and do not provide broad coverage of the input ranges. The GP test suite is imbalanced towards certain branches, which leads to the NN not being able to properly generalise based on the training data.
+
+\begin{figure}[!htb]
+    \centering
+    \makebox[\textwidth][c]{\includegraphics[width=1\linewidth]{CreditCheck-Accuracy-epochs.png}}
+    \caption{Credit check accuracy over time}
+    \label{fig:nn_credit}
+\end{figure}
+\subsubsection{Triangle Classifier:}
+%Figure \ref{fig:nn_triangle} shows the training and validation accuracies for the triangle classifier, which illustrate the strength of intelligent test suite generation the best. The random generator is able to train the NN, but only for the branches that it randomly covers  -- as such, the NN test oracle is unable to learn how to classify the triangles that it was not exposed to during training. The linear generator follows the same pattern. The GP performs best at creating a NN test oracle for the triangle classifier SUT: Not only is the NN able to learn the test suite data, it is also able to generalise the best for the triangle classifier SUT. The validation accuracy is still relatively low, which can likely be improved with better hyperparameter tuning of the GP and NN, as well as a larger computational budget.
+
+The triangle classifier provides the strongest evidence in favour of intelligent test generation. The GP-trained NN achieves a validation accuracy of 31.80\%, compared with 10.35\% for random generation and 4.17\% for linear generation. Although the absolute accuracy remains relatively low, GP provides substantially better generalisation because it identifies inputs corresponding to all relevant branches, exposing the NN to a broader range of SUT behaviours. In contrast, random generation primarily produces invalid and scalene triangles, while linear generation explores a restricted subset of input combinations. This result illustrates that intelligent search can provide a clear advantage when important behaviours occupy relatively small regions of the input space that are difficult to discover through uninformed or systematically constrained sampling.
+
+
+\begin{figure}[!tb]
+    \centering
+    \makebox[\textwidth][c]{\includegraphics[width=1\linewidth]{TriangleClassifier-Accuracy-epochs.png}}
+    \caption{Triangle Classifier Accuracy over time}
+    \label{fig:nn_triangle}
+\end{figure}
+
+\subsection{Discussion}
+\label{sub:discussion}
+
+Taken together, the results indicate that the effectiveness of intelligent test generation depends on the characteristics of the SUT rather than on the generation strategy alone. For the modified Collatz SUT, random and linear generation outperform GP in NN oracle performance, with GP producing particularly poor generalisation. For the credit-checking SUT, random generation achieves both complete branch coverage and the highest NN oracle performance, suggesting that intelligent search provides little benefit when random sampling already explores the relevant behaviours effectively. In contrast, GP achieves both the highest branch coverage and NN oracle performance for the triangle classifier, indicating that intelligent search can be advantageous when salient behaviours occupy relatively small regions of the input space. These results also show that branch coverage and NN oracle performance are not interchangeable measures: high coverage does not necessarily produce representative training data, as demonstrated by the concentrated GP training set for Collatz. More broadly, the results suggest a trade-off between exploration and exploitation, with random generation providing broad exploration and GP providing targeted search. The effectiveness of this trade-off depends on the SUT, leading to the conclusion that a NN test oracle does not inherently require intelligent test generation. These findings should be validated against larger and more complex SUTs in future work since the SUTs here were small and may not reflect the capabilities of the intelligent oracles at scale. This is particularly important given the overall low accuracy across the board for the triangle SUT, which prompts further investigation. A promising direction for future work is to combine random exploration with targeted intelligent search to improve the diversity and representativeness of training data. Large language models also present an interesting path for future research that could use the semantics of the SUT to find the most expansive branches efficiently.
+
+\section{Conclusion} \label{sec:conc}
+This study investigated whether an NN test oracle requires intelligent test generation to be effective. GP, random, and linear test generation were evaluated across three SUTs in terms of branch coverage and the performance of NN test oracles trained on the resulting test suites. No strategy consistently outperformed the others. For the modified Collatz SUT, random generation achieved higher branch coverage than GP, while the GP-generated data produced particularly poor NN generalisation. For the credit-checking SUT, random generation achieved both complete branch coverage and the highest NN validation accuracy, indicating that intelligent search provided little benefit. In contrast, GP achieved complete branch coverage and the highest NN accuracy for the triangle classifier, demonstrating its advantage when important behaviours occupy difficult-to-reach regions of the input space.
+
+These results show that intelligent search does not inherently produce better training data, and that branch coverage does not necessarily translate into improved NN generalisation. Rather, the effectiveness of a generation strategy depends on the distribution of relevant behaviours within the SUT's input space. Thus, a NN test oracle does not inherently require intelligent test generation; random generation may be preferable when broad exploration is sufficient, while intelligent search can be advantageous when targeted exploration is needed. Future work could investigate hybrid strategies combining random exploration with targeted GP search to improve the diversity and representativeness of training data.
+%This study investigated whether GPs could be used to generate test suites for training NN test oracles, and as such lead to improved NN test oracle performance. The primary goal was to address the common problems with NN test oracles, wherein they are trained on subpar and minimal data, leading to poor accuracy and training times. The aim was to use the intelligent search of a GP to produce test suites with high path coverage that could result in a more accurate NN test oracle. 
+
+%The GP approach was compared to the random and linear input generators. The findings of the study suggest that the GP works best with the SUTs that exhibit complex behaviours, and hard-to-trigger paths which require intelligent input space partitioning. For simpler programs where broader input range coverage corresponded to better path coverage, random proved more effective than GP.  These results show the strength of a GP in being able to find branches that other naive generation methods cannot. However, it also shows the limitations of the GP approach, which falls in line with existing research on the topic. 
+
+%Overall, our findings show that an intelligent test coverage generation method is required for training a NN test oracle to generalise effectively when the SUT has highly complex clustered input spaces. It is hypothesised that a combination of randomly sampled inputs and GP-generated inputs would provide the best path coverage overall.
+
+%Future work will include a scalability study, where the viability and effectiveness of the NN test oracles will be studied on a more varied set of real-world SUTs. The effect of hyperparameter optimisation on the performance of both the NN test oracle and the test suite generator can also be studied. Further, an automatic pipeline may be constructed to intelligently match the SUT with the applicable test suit generator and NN test oracle architecture applicable to the complexity of the task at hand.
+% This report will first further outline the problem that is to be addressed in Section \ref{sec:prob_stmt}. Then it will explain the necessary prerequisite knowledge and terms in Sections \ref{sec:back} and \ref{sec:prob_stmt}. Section \ref{sec:meth} will describe how the framework and pipeline will be applied and the results of the framework will be shown in \ref{sec:disc}.
+% \paragraph{Sample Heading (Fourth Level)}
+% The contribution should contain no more than four levels of
+% headings. Table~\ref{tab1} gives a summary of all heading levels.
+
+% \begin{table}
+% \caption{Table captions should be placed above the
+% tables.}\label{tab1}
+% \begin{tabular}{|l|l|l|}
+% \hline
+% Heading level &  Example & Font size and style\\
+% \hline
+% Title (centered) &  {\Large\bfseries Lecture Notes} & 14 point, bold\\
+% 1st-level heading &  {\large\bfseries 1 Introduction} & 12 point, bold\\
+% 2nd-level heading & {\bfseries 2.1 Printing Area} & 10 point, bold\\
+% 3rd-level heading & {\bfseries Run-in Heading in Bold.} Text follows & 10 point, bold\\
+% 4th-level heading & {\itshape Lowest Level Heading.} Text follows & 10 point, italic\\
+% \hline
+% \end{tabular}
+% \end{table}
+
+
+% \noindent Displayed equations are centered and set on a separate
+% line.
+% \begin{equation}
+% x + y = z
+% \end{equation}
+% Please try to avoid rasterized images for line-art diagrams and
+% schemas. Whenever possible, use vector graphics instead (see
+% Fig.~\ref{fig1}).
+
+% \begin{figure}
+% \includegraphics[width=\textwidth]{fig1.eps}
+% \caption{A figure caption is always placed below the illustration.
+% Please note that short captions are centered, while long ones are
+% justified by the macro package automatically.} \label{fig1}
+% \end{figure}
+
+% \begin{theorem}
+% This is a sample theorem. The run-in heading is set in bold, while
+% the following text appears in italics. Definitions, lemmas,
+% propositions, and corollaries are styled the same way.
+% \end{theorem}
+%
+% the environments 'definition', 'lemma', 'proposition', 'corollary',
+% 'remark', and 'example' are defined in the LLNCS documentclass as well.
+%
+% \begin{proof}
+% Proofs, examples, and remarks have the initial word in italics,
+% while the following text appears in normal font.
+% \end{proof}
+% For citations of references, we prefer the use of square brackets
+% and consecutive numbers. Citations using labels or the author/year
+% convention are also acceptable. The following bibliography provides
+% a sample reference list with entries for journal
+% articles~\cite{ref_article1}, an LNCS chapter~\cite{ref_lncs1}, a
+% book~\cite{ref_book1}, proceedings without editors~\cite{ref_proc1},
+% and a homepage~\cite{ref_url1}. Multiple citations are grouped
+% \cite{ref_article1,ref_lncs1,ref_book1},
+% \cite{ref_article1,ref_book1,ref_proc1,ref_url1}.
+
+% \begin{credits}
+% \subsubsection{\ackname} A bold run-in heading in small font size at the end of the paper is
+% used for general acknowledgments, for example: This study was funded
+% by X (grant number Y).
+
+% \subsubsection{\discintname}
+% It is now necessary to declare any competing interests or to specifically
+% state that the authors have no competing interests. Please place the
+% statement with a bold run-in heading in small font size beneath the
+% (optional) acknowledgments\footnote{If EquinOCS, our proceedings submission
+% system, is used, then the disclaimer can be provided directly in the system.},
+% for example: The authors have no competing interests to declare that are
+% relevant to the content of this article. Or: Author A has received research
+% grants from Company W. Author B has received a speaker honorarium from
+% Company X and owns stock in Company Y. Author C is a member of committee Z.
+% \end{credits}
+%
+% ---- Bibliography ----
+%
+% BibTeX users should specify bibliography style 'splncs04'.
+% References will then be sorted and formatted in the correct style.
+%
+% \bibliographystyle{splncs04}
+% \bibliography{mybibliography}
+%
+% need to change biblatex to use the correct format
+
+
+%%%%%%%%%%%%%%% COMPULSORY %%%%%%%%%
+\begin{credits}
+\subsubsection{\discintname}
+The authors have no competing interests to declare that are
+relevant to the content of this paper.
+\end{credits}
+%%%%%%%%%%%%%
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%{\bf ALERT !!!} \\
+%THE FORMAT OF THE REFERENCES IS NOT LNCS-COMPLIANT !!!\\
+%{\bf PLEASE ACTIVATE THE BIB-STYLE ``SPLNCS04'' !!!}
+
+\bibliographystyle{splncs04}
+\bibliography{sources}
+% \begin{thebibliography}{8}
+% \bibitem{ref_article1}
+% Author, F.: Article title. Journal \textbf{2}(5), 99--110 (2016)
+
+% \bibitem{ref_lncs1}
+% Author, F., Author, S.: Title of a proceedings paper. In: Editor,
+% F., Editor, S. (eds.) CONFERENCE 2016, LNCS, vol. 9999, pp. 1--13.
+% Springer, Heidelberg (2016). \doi{10.10007/1234567890}
+
+% \bibitem{ref_book1}
+% Author, F., Author, S., Author, T.: Book title. 2nd edn. Publisher,
+% Location (1999)
+
+% \bibitem{ref_proc1}
+% Author, A.-B.: Contribution title. In: 9th International Proceedings
+% on Proceedings, pp. 1--2. Publisher, Location (2010)
+
+% \bibitem{ref_url1}
+% LNCS Homepage, \url{http://www.springer.com/lncs}, last accessed 2023/10/25
+% \end{thebibliography}
+\end{document}
